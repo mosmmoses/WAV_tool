@@ -62,7 +62,7 @@ function drawWaveform(waveform, sampleRate) {
           },
           ticks: {
             callback: function (value, index, values) {
-              return (value / sampleRate).toFixed(3); // Format time with 3 decimal places
+              return (value / sampleRate).toFixed(3); // Time with 3 decimal places
             }
           }
         },
