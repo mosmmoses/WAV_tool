@@ -4,11 +4,8 @@
 <head>
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>WAV File Player and Analyzer</title>
+	<title>WAV File Editor</title>
 	<link rel="stylesheet" href="styles.css">
-	<style>
-		@import url("https://shiftline-shared.s3.amazonaws.com/JS/WAVEDIT/waveeditstyle.css");
-	</style>
 </head>
 
 <body>
@@ -16,23 +13,17 @@
 	<div id="waveedit_box">
 		<div id="file-input-box">
 			<label for="file-input" id="file-input-label" class="sl_select">Загрузите&nbsp;файл</label>
-			<snap id="file-input-filename"></snap>
+			<span id="file-input-filename"></span>
 			<input type="file" id="file-input" class="sl_select" accept=".wav"/>
         </div>
-			<snap id="wavfile_info"></snap>
-			<snap id="saveWAV_disclaimer" style="color:#E5007D" hidden>
-				<b>Утилита подготовки работает только с файлами 1ch(MONO) 24bit 48KHz. <br>Рекомендуем конвертировать файл в нужный формат и повторить попытку.</b>
-			</snap>
+			<span id="wavfile_info"></span>
+			<span id="saveWAV_disclaimer" style="color:#E5007D" hidden>
+            <b>Утилита подготовки работает только с файлами 1ch(MONO) 24bit 48KHz. <br>Рекомендуем конвертировать файл в нужный формат и повторить попытку.</b>
+        </span>
 			<div id="saveWAV_button" hidden>
 				<a href="javascript:SL_save_wav()" target="" class="czlegen_button t762__btn t-btn t-btn_sm"
-					style="color:#ebeff4;background-color:#134fa7;border-radius:10px; -moz-border-radius:10px; -webkit-border-radius:10px;">
-					<table style="width:100%; height:100%;">
-						<tbody>
-							<tr>
-								<td class="js-store-prod-buy-btn-txt">Сохранить подготовленный файл</td>
-							</tr>
-						</tbody>
-					</table>
+					style="color:#ebeff4;background-color:#134fa7;border-radius:10px;">
+					Сохранить подготовленный файл
 				</a>
 			</div>
 		</div>
@@ -48,7 +39,7 @@
 		<canvas id="frequencyChart"></canvas>
 		<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 		<script src="https://shiftline-shared.s3.amazonaws.com/JS/wavefile.js"></script>
-		<script src="https://shiftline-shared.s3.amazonaws.com/JS/WAVEDIT/waveedit.js"></script>
+		<!-- <script src="https://shiftline-shared.s3.amazonaws.com/JS/WAVEDIT/waveedit.js"></script> -->
 		<script src="script.js"></script>
 </body>
 

@@ -2,40 +2,87 @@ let waveformChart = null;
 let frequencyChart = null;
 let originalWaveform = null;
 let adjustedWaveform = null;
-let audioBuffer = null;
 let audioContext = null;
 let source = null;
+
+var reader = new FileReader();
+var firName = '';
+var wav_in = new wavefile.WaveFile();
 
 document.getElementById('file-input').addEventListener('change', function (event) {
   const file = event.target.files[0];
   if (file && file.type === 'audio/wav') {
-    const reader = new FileReader();
     reader.onload = function (e) {
-      const arrayBuffer = e.target.result;
-      processAudio(arrayBuffer, file);
+      try {
+        wav_in.fromDataURI(e.target.result.replace('audio/x-wav', 'audio/wav'));
+        SL_readfile_msg(true);
+        displayFileInfo(wav_in, file);
+
+        const arrayBuffer = e.target.result.split(',')[1];
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        audioContext.decodeAudioData(arrayBufferToBuffer(arrayBuffer), function (buffer) {
+          originalWaveform = buffer.getChannelData(0);
+          adjustedWaveform = adjustVolume(originalWaveform, -25);
+          drawWaveform(originalWaveform, buffer.sampleRate);
+          drawFrequencyResponse(originalWaveform, buffer.sampleRate);
+          playAudio(originalWaveform, buffer.sampleRate);
+        });
+
+      } catch (err) {
+        SL_readfile_msg(false, err.message);
+      }
     };
-    reader.readAsArrayBuffer(file);
+    reader.readAsDataURL(file);
+    firName = file.name.split('.').slice(0, -1).join('.');
   } else {
     alert('Please upload a valid WAV file.');
   }
 });
 
-function processAudio(arrayBuffer, file) {
-  audioContext = new (window.AudioContext || window.webkitAudioContext)();
-  audioContext.decodeAudioData(arrayBuffer, function (buffer) {
-    audioBuffer = buffer;
-    originalWaveform = buffer.getChannelData(0);
-    adjustedWaveform = adjustVolume(originalWaveform, -25); // Initial adjustment to -25 dB RMS
-    drawWaveform(adjustedWaveform, buffer.sampleRate);
-    drawFrequencyResponse(adjustedWaveform, buffer.sampleRate);
-    playAudio(adjustedWaveform, buffer.sampleRate);
-  });
+function arrayBufferToBuffer(arrayBuffer) {
+  const binaryString = window.atob(arrayBuffer);
+  const len = binaryString.length;
+  const bytes = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
+
+function displayFileInfo(wav, file) {
+  const infoBox = document.getElementById('wavfile_info');
+  const saveButton = document.getElementById('saveWAV_button');
+  const disclaimer = document.getElementById('saveWAV_disclaimer');
+
+  const sampleRateError = (wav.fmt.sampleRate !== 48000) ? " (Error, 48kHz only)" : "";
+  const bitDepthError = (wav.bitDepth !== '24') ? " (Error, 24bit only)" : "";
+  const channelsError = (wav.fmt.numChannels !== 1) ? " (Error, mono only)" : "";
+  const metadataDisplay = (wav.chunkSize !== wav.data.chunkSize + wav.fmt.chunkSize + 20) ? "YES" : "NO";
+  const headerLengthDisplay = (wav.fmt.chunkSize === 16) ? "16 (short)" : `${wav.fmt.chunkSize} (long)`;
+  const samplesCount = wav.getSamples().length;
+
+  infoBox.innerHTML = `
+    <p>Sample rate: ${wav.fmt.sampleRate}Hz${sampleRateError}</p>
+    <p>Bit Depth: ${wav.bitDepth}bit${bitDepthError}</p>
+    <p>Channels: ${wav.fmt.numChannels}${channelsError}</p>
+    <p>Metadata: ${metadataDisplay}</p>
+    <p>Header length: ${headerLengthDisplay}</p>
+    <p>Samples: ${samplesCount}</p>
+  `;
+
+  if (wav.fmt.numChannels === 1 && wav.fmt.sampleRate === 48000 && wav.bitDepth === '24') {
+    disclaimer.style.display = 'none';
+    saveButton.style.display = 'block';
+  } else {
+    disclaimer.style.display = 'block';
+    saveButton.style.display = 'none';
+  }
 }
 
 function drawWaveform(waveform, sampleRate) {
   const ctx = document.getElementById('waveformChart').getContext('2d');
-  const data = waveform.slice(0, 1000); // Display first 1000 samples
-  const t = data.map((_, index) => index / sampleRate); // Time vector
+  const data = waveform.slice(0, 1000);
+  const t = data.map((_, index) => index / sampleRate);
 
   if (waveformChart) {
     waveformChart.destroy();
@@ -61,8 +108,10 @@ function drawWaveform(waveform, sampleRate) {
             text: 'Time (s)'
           },
           ticks: {
-            callback: function (value, index, values) {
-              return (value / sampleRate).toFixed(3); // Format time with 3 decimal places
+            callback: function (value) {
+              // return (value / sampleRate).toFixed(3);
+              return value / sampleRate;
+
             }
           }
         },
@@ -140,158 +189,38 @@ function playAudio(waveform, sampleRate) {
   source.start(0);
 
   const audioPlayer = document.getElementById('audioPlayer');
-  audioPlayer.src = URL.createObjectURL(bufferToWave(audioBuffer));
+  const wavBlob = new Blob([wav_in.toBuffer()], { type: 'audio/wav' });
+  audioPlayer.src = URL.createObjectURL(wavBlob);
   audioPlayer.play();
 }
 
-function bufferToWave(abuffer) {
-  let numOfChan = abuffer.numberOfChannels,
-    length = abuffer.length * numOfChan * 2 + 44,
-    buffer = new ArrayBuffer(length),
-    view = new DataView(buffer),
-    channels = [],
-    i,
-    sample,
-    offset = 0,
-    pos = 0;
-
-  // write WAVE header
-  setUint32(0x46464952); // "RIFF"
-  setUint32(length - 8); // file length - 8
-  setUint32(0x45564157); // "WAVE"
-
-  setUint32(0x20746d66); // "fmt " chunk
-  setUint32(16); // length = 16
-  setUint16(1); // PCM (uncompressed)
-  setUint16(numOfChan);
-  setUint32(abuffer.sampleRate);
-  setUint32(abuffer.sampleRate * 2 * numOfChan); // avg. bytes/sec
-  setUint16(numOfChan * 2); // block-align
-  setUint16(16); // 16-bit (hardcoded in this demo)
-
-  setUint32(0x61746164); // "data" - chunk
-  setUint32(length - pos - 4); // chunk length
-
-  // write interleaved data
-  for (i = 0; i < abuffer.length; i++) {
-    for (let channel = 0; channel < numOfChan; channel++) {
-      sample = abuffer.getChannelData(channel)[i] * 0x7fff; // convert to 16-bit
-      view.setInt16(pos, sample, true); // write 16-bit sample
-      pos += 2;
-    }
-  }
-
-  return new Blob([buffer], { type: "audio/wav" });
-
-  function setUint16(data) {
-    view.setUint16(pos, data, true);
-    pos += 2;
-  }
-
-  function setUint32(data) {
-    view.setUint32(pos, data, true);
-    pos += 4;
-  }
-}
-
-// Volume adjustment
 function adjustVolume(waveform, targetRMS) {
-  const currentRMS = calculateRMS(waveform);
-  const targetAmplitude = Math.pow(10, targetRMS / 20);
-  const currentAmplitude = Math.pow(10, currentRMS / 20);
-  const scaleFactor = targetAmplitude / currentAmplitude;
-
+  const rms = Math.sqrt(waveform.reduce((acc, val) => acc + val ** 2, 0) / waveform.length);
+  const scaleFactor = Math.pow(10, targetRMS / 20) / rms;
   return waveform.map(sample => sample * scaleFactor);
 }
 
-function calculateRMS(waveform) {
-  const sumOfSquares = waveform.reduce((sum, sample) => sum + sample * sample, 0);
-  const meanSquare = sumOfSquares / waveform.length;
-  return 10 * Math.log10(meanSquare);
-}
-
 document.querySelectorAll('input[name="volume"]').forEach(radio => {
-  radio.addEventListener('change', function () {
-    const value = parseFloat(this.value);
-    adjustedWaveform = adjustVolume(originalWaveform, -25 + value);
-    drawWaveform(adjustedWaveform, audioBuffer.sampleRate);
-    drawFrequencyResponse(adjustedWaveform, audioBuffer.sampleRate);
-    playAudio(adjustedWaveform, audioBuffer.sampleRate);
+  radio.addEventListener('change', function (event) {
+    const volumeLevel = parseFloat(event.target.value);
+    adjustedWaveform = adjustVolume(originalWaveform, volumeLevel);
+    drawWaveform(adjustedWaveform, audioContext.sampleRate);
+    drawFrequencyResponse(adjustedWaveform, audioContext.sampleRate);
+    playAudio(adjustedWaveform, audioContext.sampleRate);
   });
 });
 
-// Additional functionality for wavefile processing
-var reader = new FileReader();
-var firName = '';
-
-var wav_in = new wavefile.WaveFile();
-
-reader.onload = (function (e) {
-  // Reset
-  document.getElementById('saveWAV_disclaimer').hidden = true;
-  document.getElementById('saveWAV_button').hidden = true;
-  document.getElementById('file-input-filename').textContent = '';
-  document.getElementById('wavfile_info').textContent = '';
-
-  // Parse wav
-  try {
-    wav_in.fromDataURI(e.target.result.replace('audio/x-wav', 'audio/wav')); // Подмена заголовка файла для браузеров в макоси
-  }
-  catch (err) {
-    SL_readfile_msg(false, err.message);
-    return;
-  }
-
-  SL_readfile_msg(true);
-
-  // File info
-  document.getElementById('wavfile_info').innerHTML = SL_getwavinfo(wav_in);
-
-  // If format OK show save btn
-  if (wav_in.bitDepth == "24" &&
-    wav_in.fmt.sampleRate == "48000" &&
-    wav_in.fmt.numChannels == "1") {
-    document.getElementById('saveWAV_button').hidden = false;
-    return;
-  } else { // Show disclaimer if format is incorrect
-    document.getElementById('saveWAV_disclaimer').hidden = false;
-  }
-});
-
-document.getElementById('file-input').addEventListener('change', function (e) {
-  try {
-    reader.readAsDataURL(e.target.files[0]);
-    firName = e.target.files[0].name.split('.').slice(0, -1).join('.');
-  }
-  catch (err) {
-    SL_readfile_msg(false, '');
-  }
-});
-
-function SL_getwavinfo(wav) {
-  if (!wav) return null;
-
-  let txt = '';
-  txt += "Channels: " + wav.fmt.numChannels + "<br>";
-  txt += "Bit depth: " + wav.bitDepth + "<br>";
-  txt += "Sample rate: " + wav.fmt.sampleRate + "<br>";
-  if (wav.chunkSize != wav.data.chunkSize + wav.fmt.chunkSize + 20) txt += "Metadata: YES" + "<br>"; // Сработает с любым заголовком и без метаданных
-  else txt += "Metadata: no" + "<br>";
-  if (wav.fmt.chunkSize == 16) txt += "Header length: 16 bytes (short)" + "<br>";
-  else txt += "Header length: " + wav.fmt.chunkSize + " bytes (long)" + "<br>";
-  return txt;
-}
-
 function SL_readfile_msg(success, message) {
+  const filenameDisplay = document.getElementById('file-input-filename');
   if (success) {
-    document.getElementById('file-input-filename').textContent = firName;
-    document.getElementById('file-input-filename').style.color = '#555d6c';
+    filenameDisplay.textContent = firName;
+    filenameDisplay.style.color = '#555d6c';
   } else {
     if (message == '') {
       message = "Ошибка открытия файла!";
     }
-    document.getElementById('file-input-filename').textContent = message;
-    document.getElementById('file-input-filename').style.color = 'red';
+    filenameDisplay.textContent = message;
+    filenameDisplay.style.color = 'red';
     firName = '';
   }
 }
@@ -299,9 +228,7 @@ function SL_readfile_msg(success, message) {
 function SL_getcleanwav(wav) {
   if (wav) {
     let wav_out = new wavefile.WaveFile();
-
     wav_out.fromScratch(wav.fmt.numChannels, wav.fmt.sampleRate, wav.bitDepth, wav.getSamples());
-
     return wav_out;
   } else {
     return null;
@@ -310,45 +237,41 @@ function SL_getcleanwav(wav) {
 
 function SL_save_wav() {
   try {
-    wav = SL_getcleanwav(wav_in);
+    // New buffer with adjusteadjusted waveform
+    const saveBuffer = audioContext.createBuffer(1, adjustedWaveform.length, audioContext.sampleRate);
+    saveBuffer.getChannelData(0).set(adjustedWaveform);
+
+    // New WaveFile obj. for saving the results
+    let wav_out = new wavefile.WaveFile();
+    wav_out.fromScratch(1, audioContext.sampleRate, '24', saveBuffer.getChannelData(0));
+
+    // Setting the file header
+    wav_out.fromScratch(1, audioContext.sampleRate, '24', adjustedWaveform);
+    wav_out.toBitDepth('24'); // Устанавливаем битовую глубину в 24 бита
+    const outputWav = wav_out.toBuffer();
+
+    // Create and upload new file
+    jSaver(outputWav, firName + "_clean", "wav");
+
   } catch (err) {
     SL_readfile_msg(false, err.message);
-    return;
   }
-  if (wav) {
-    jSaver(wav.toBuffer(), firName + "_clean", "wav");
-    return;
-  }
-}
-
-function readSingleFile(e) {
-  var file = e.target.files[0];
-  if (!file) {
-    SL_readfile_msg(false, '');
-    firName = '';
-    return;
-  }
-  reader.readAsBinaryString(file);
-  firName = file.name.split('.').slice(0, -1).join('.');
 }
 
 function jSaver(o, name, ext) {
   name = name.replace(/[^a-zA-Z0-9]/g, '_');
-  var saveByteArray = (function () {
-    var a = document.createElement("a");
-    document.body.appendChild(a);
-    a.style = "display: none";
-    return function (data, name) {
-      var blob = new Blob(data, { type: "octet/stream" }),
-        url = window.URL.createObjectURL(blob);
-      a.href = url;
-      a.download = name;
-      a.click();
-      window.URL.revokeObjectURL(url);
-    };
-  }());
-  saveByteArray([o], name + "." + ext);
+  var a = document.createElement("a");
+  document.body.appendChild(a);
+  a.style = "display: none";
+  var blob = new Blob([o], { type: "audio/wav" }),
+    url = window.URL.createObjectURL(blob);
+  a.href = url;
+  a.download = name + "." + ext;
+  a.click();
+  window.URL.revokeObjectURL(url);
+  document.body.removeChild(a);
 }
+
 
 // FFT definition
 class FFT {
