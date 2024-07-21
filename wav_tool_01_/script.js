@@ -20,9 +20,9 @@ document.getElementById('file-input').addEventListener('change', function (event
 
         const arrayBuffer = e.target.result.split(',')[1];
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        audioContext.decodeAudioData(arrayBufferToBuffer(arrayBuffer), function (buffer) {
+        audioContext.decodeAudioData(processAudio(arrayBuffer), function (buffer) {
           originalWaveform = buffer.getChannelData(0);
-          adjustedWaveform = adjustVolume(originalWaveform, -25);
+          adjustedWaveform = adjustVolume(originalWaveform, 0);
           drawWaveform(originalWaveform, buffer.sampleRate);
           drawFrequencyResponse(originalWaveform, buffer.sampleRate);
           playAudio(originalWaveform, buffer.sampleRate);
@@ -39,7 +39,7 @@ document.getElementById('file-input').addEventListener('change', function (event
   }
 });
 
-function arrayBufferToBuffer(arrayBuffer) {
+function processAudio(arrayBuffer) {
   const binaryString = window.atob(arrayBuffer);
   const len = binaryString.length;
   const bytes = new Uint8Array(len);
@@ -61,6 +61,10 @@ function displayFileInfo(wav, file) {
   const headerLengthDisplay = (wav.fmt.chunkSize === 16) ? "16 (short)" : `${wav.fmt.chunkSize} (long)`;
   const samplesCount = wav.getSamples().length;
 
+  // Расчет RMS и перевод его в dB
+  const rmsValue = calculateRMS(wav.getSamples());
+  const dBValue = rmsToDb(rmsValue);
+
   infoBox.innerHTML = `
     <p>Sample rate: ${wav.fmt.sampleRate}Hz${sampleRateError}</p>
     <p>Bit Depth: ${wav.bitDepth}bit${bitDepthError}</p>
@@ -68,6 +72,8 @@ function displayFileInfo(wav, file) {
     <p>Metadata: ${metadataDisplay}</p>
     <p>Header length: ${headerLengthDisplay}</p>
     <p>Samples: ${samplesCount}</p>
+    <p>RMS: ${dBValue.toFixed(3)} </p>
+    
   `;
 
   if (wav.fmt.numChannels === 1 && wav.fmt.sampleRate === 48000 && wav.bitDepth === '24') {
@@ -82,7 +88,7 @@ function displayFileInfo(wav, file) {
 function drawWaveform(waveform, sampleRate) {
   const ctx = document.getElementById('waveformChart').getContext('2d');
   const data = waveform.slice(0, 1000);
-  const t = data.map((_, index) => index / sampleRate);
+  let t = data.map((_, index) => index / sampleRate);
 
   if (waveformChart) {
     waveformChart.destroy();
@@ -109,9 +115,7 @@ function drawWaveform(waveform, sampleRate) {
           },
           ticks: {
             callback: function (value) {
-              // return (value / sampleRate).toFixed(3);
-              return value / sampleRate;
-
+              return (value / sampleRate).toFixed(4);
             }
           }
         },
@@ -191,19 +195,42 @@ function playAudio(waveform, sampleRate) {
   const audioPlayer = document.getElementById('audioPlayer');
   const wavBlob = new Blob([wav_in.toBuffer()], { type: 'audio/wav' });
   audioPlayer.src = URL.createObjectURL(wavBlob);
-  audioPlayer.play();
 }
 
+// Volume adjustment
 function adjustVolume(waveform, targetRMS) {
-  const rms = Math.sqrt(waveform.reduce((acc, val) => acc + val ** 2, 0) / waveform.length);
-  const scaleFactor = Math.pow(10, targetRMS / 20) / rms;
+  const targetAmplitude = Math.pow(10, targetRMS / 20);
+  const currentRMS = calculateRMS(waveform.slice(0, 1000));
+  const currentAmplitude = Math.pow(10, rmsToDb(currentRMS) / 20);
+  const scaleFactor = targetAmplitude / currentAmplitude;
   return waveform.map(sample => sample * scaleFactor);
+}
+
+function dBReduction(waveform, dB) {
+  const factor = Math.pow(10, dB / 20);
+  return waveform.map(sample => sample * factor);
+}
+
+function calculateRMS(waveform) {
+    const sampleLength = 1000; // Количество сэмплов для анализа
+    let sumOfSquares = 0;
+
+    for (let i = 0; i < sampleLength; i++) {
+      sumOfSquares += waveform[i] * waveform[i]; // Суммируем квадраты значений амплитуд
+    }
+
+    return Math.sqrt(sumOfSquares / waveform.length);
+}
+
+// RMS to дБ
+function rmsToDb(rms) {
+  return 20 * Math.log10(rms);
 }
 
 document.querySelectorAll('input[name="volume"]').forEach(radio => {
   radio.addEventListener('change', function (event) {
-    const volumeLevel = parseFloat(event.target.value);
-    adjustedWaveform = adjustVolume(originalWaveform, volumeLevel);
+    const dBValue = parseFloat(event.target.value);
+    adjustedWaveform = dBReduction(originalWaveform, dBValue);
     drawWaveform(adjustedWaveform, audioContext.sampleRate);
     drawFrequencyResponse(adjustedWaveform, audioContext.sampleRate);
     playAudio(adjustedWaveform, audioContext.sampleRate);
@@ -247,7 +274,7 @@ function SL_save_wav() {
 
     // Setting the file header
     wav_out.fromScratch(1, audioContext.sampleRate, '24', adjustedWaveform);
-    wav_out.toBitDepth('24'); // Устанавливаем битовую глубину в 24 бита
+    wav_out.toBitDepth('24'); // Setting the bit depth to 24 bits
     const outputWav = wav_out.toBuffer();
 
     // Create and upload new file
