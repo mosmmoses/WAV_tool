@@ -61,7 +61,7 @@ function displayFileInfo(wav, file) {
   const headerLengthDisplay = (wav.fmt.chunkSize === 16) ? "16 (short)" : `${wav.fmt.chunkSize} (long)`;
   const samplesCount = wav.getSamples().length;
 
-  // Расчет RMS и перевод его в dB
+  // RMS to dB
   const rmsValue = calculateRMS(wav.getSamples());
   const dBValue = rmsToDb(rmsValue);
 
@@ -212,17 +212,17 @@ function dBReduction(waveform, dB) {
 }
 
 function calculateRMS(waveform) {
-    const sampleLength = 1000; // Количество сэмплов для анализа
+    const sampleLength = 1000; // number of samples to analyse
     let sumOfSquares = 0;
 
     for (let i = 0; i < sampleLength; i++) {
-      sumOfSquares += waveform[i] * waveform[i]; // Суммируем квадраты значений амплитуд
+      sumOfSquares += waveform[i] * waveform[i];
     }
 
     return Math.sqrt(sumOfSquares / waveform.length);
 }
 
-// RMS to дБ
+// RMS to dB
 function rmsToDb(rms) {
   return 20 * Math.log10(rms);
 }
