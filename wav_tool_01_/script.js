@@ -14,7 +14,6 @@ document.getElementById('file-input').addEventListener('change', function (event
   if (file && file.type === 'audio/wav') {
     reader.onload = function (e) {
       try {
-        // resetView(); // Сброс вывода данных о файле и графиков
         wav_in.fromDataURI(e.target.result.replace('audio/x-wav', 'audio/wav'));
         SL_readfile_msg(true);
         // displayFileInfo(wav_in, file);
@@ -23,7 +22,7 @@ document.getElementById('file-input').addEventListener('change', function (event
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
         audioContext.decodeAudioData(processAudio(arrayBuffer), function (buffer) {
           originalWaveform = buffer.getChannelData(0);
-          // adjustedWaveform = adjustVolume(originalWaveform, 0);
+          adjustedWaveform = adjustVolume(originalWaveform, 0);
           // drawWaveform(originalWaveform, buffer.sampleRate);
           // drawFrequencyResponse(originalWaveform, buffer.sampleRate);
           // playAudio(originalWaveform, buffer.sampleRate);
@@ -76,7 +75,8 @@ function displayFileInfo(wav, sampleRate, waveform) {
     <p>Metadata: ${metadataDisplay}</p>
     <p>Header length: ${headerLengthDisplay}</p>
     <p>Samples: ${samplesCount}</p>
-    <p>RMS: ${dBValue.toFixed(3)} </p>
+    <p>RMS dB: ${dBValue.toFixed(3)} </p>
+    <p>Loudness: ${wav.bext.loudnessValue}</p>
     
   `;
 
@@ -125,7 +125,7 @@ function clearVisualization() {
 
 function drawWaveform(waveform, sampleRate) {
   const ctx = document.getElementById('waveformChart').getContext('2d');
-  const data = waveform.slice(0, 1000);
+  const data = waveform.slice(0, waveform.length);
   let t = data.map((_, index) => index / sampleRate);
 
   if (waveformChart) {
@@ -153,7 +153,7 @@ function drawWaveform(waveform, sampleRate) {
           },
           ticks: {
             callback: function (value) {
-              return (value / sampleRate).toFixed(4);
+              return (value / sampleRate).toFixed(3);
             }
           }
         },
@@ -169,7 +169,7 @@ function drawWaveform(waveform, sampleRate) {
 }
 
 function drawFrequencyResponse(signal, sampleRate) {
-  const fftSize = 2048;
+  const fftSize = 1024;
   const buffer = new Float32Array(fftSize);
   buffer.set(signal.slice(0, fftSize));
 
@@ -238,16 +238,17 @@ function playAudio(waveform, sampleRate) {
 // Volume adjustment
 function adjustVolume(waveform, targetRMS) {
   const targetAmplitude = Math.pow(10, targetRMS / 20);
-  const currentRMS = calculateRMS(waveform.slice(0, 1000));
+  const currentRMS = calculateRMS(waveform.slice(0, waveform.length));
+  // const currentRMS = calculateRMS(waveform.slice(0, 1000));
   const currentAmplitude = Math.pow(10, rmsToDb(currentRMS) / 20);
-  const scaleFactor = targetAmplitude / currentAmplitude;
+  const scaleFactor = (targetAmplitude / currentAmplitude);
   return waveform.map(sample => sample * scaleFactor);
 }
 
-function dBReduction(waveform, dB) {
-  const factor = Math.pow(10, dB / 20);
-  return waveform.map(sample => sample * factor);
-}
+// function dBReduction(waveform, dB) {
+//   const factor = Math.pow(10, dB / 20);
+//   return waveform.map(sample => sample * factor);
+// }
 
 function calculateRMS(waveform) {
   const sampleLength = waveform.length; // number of samples to analyse
@@ -268,7 +269,7 @@ function rmsToDb(rms) {
 document.querySelectorAll('input[name="volume"]').forEach(radio => {
   radio.addEventListener('change', function (event) {
     const dBValue = parseFloat(event.target.value);
-    adjustedWaveform = dBReduction(originalWaveform, dBValue);
+    adjustedWaveform = adjustVolume(originalWaveform, dBValue);
     drawWaveform(adjustedWaveform, audioContext.sampleRate);
     drawFrequencyResponse(adjustedWaveform, audioContext.sampleRate);
     playAudio(adjustedWaveform, audioContext.sampleRate);
@@ -290,15 +291,15 @@ function SL_readfile_msg(success, message) {
   }
 }
 
-function SL_getcleanwav(wav) {
-  if (wav) {
-    let wav_out = new wavefile.WaveFile();
-    wav_out.fromScratch(wav.fmt.numChannels, wav.fmt.sampleRate, wav.bitDepth, wav.getSamples());
-    return wav_out;
-  } else {
-    return null;
-  }
-}
+// function SL_getcleanwav(wav) {
+//   if (wav) {
+//     let wav_out = new wavefile.WaveFile();
+//     wav_out.fromScratch(wav.fmt.numChannels, wav.fmt.sampleRate, wav.bitDepth, wav.getSamples());
+//     return wav_out;
+//   } else {
+//     return null;
+//   }
+// }
 
 function SL_save_wav() {
   try {
