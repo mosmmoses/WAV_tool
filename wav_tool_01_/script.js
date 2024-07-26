@@ -75,9 +75,7 @@ function displayFileInfo(wav, sampleRate, waveform) {
     <p>Metadata: ${metadataDisplay}</p>
     <p>Header length: ${headerLengthDisplay}</p>
     <p>Samples: ${samplesCount}</p>
-    <p>RMS dB: ${dBValue.toFixed(3)} </p>
-    <p>Loudness: ${wav.bext.loudnessValue}</p>
-    
+    <p>RMS dB: ${dBValue.toFixed(3)} </p>   
   `;
 
   if (wav.fmt.numChannels === 1 && wav.fmt.sampleRate === 48000 && wav.bitDepth === '24') {
