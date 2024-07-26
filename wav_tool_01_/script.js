@@ -14,18 +14,22 @@ document.getElementById('file-input').addEventListener('change', function (event
   if (file && file.type === 'audio/wav') {
     reader.onload = function (e) {
       try {
+        // resetView(); // Сброс вывода данных о файле и графиков
         wav_in.fromDataURI(e.target.result.replace('audio/x-wav', 'audio/wav'));
         SL_readfile_msg(true);
-        displayFileInfo(wav_in, file);
+        // displayFileInfo(wav_in, file);
 
         const arrayBuffer = e.target.result.split(',')[1];
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
         audioContext.decodeAudioData(processAudio(arrayBuffer), function (buffer) {
           originalWaveform = buffer.getChannelData(0);
-          adjustedWaveform = adjustVolume(originalWaveform, 0);
-          drawWaveform(originalWaveform, buffer.sampleRate);
-          drawFrequencyResponse(originalWaveform, buffer.sampleRate);
-          playAudio(originalWaveform, buffer.sampleRate);
+          // adjustedWaveform = adjustVolume(originalWaveform, 0);
+          // drawWaveform(originalWaveform, buffer.sampleRate);
+          // drawFrequencyResponse(originalWaveform, buffer.sampleRate);
+          // playAudio(originalWaveform, buffer.sampleRate);
+
+          // Передача необходимых данных в функцию отображения информации о загруженном файле
+          displayFileInfo(wav_in, buffer.sampleRate, originalWaveform);
         });
 
       } catch (err) {
@@ -49,7 +53,7 @@ function processAudio(arrayBuffer) {
   return bytes.buffer;
 }
 
-function displayFileInfo(wav, file) {
+function displayFileInfo(wav, sampleRate, waveform) {
   const infoBox = document.getElementById('wavfile_info');
   const saveButton = document.getElementById('saveWAV_button');
   const disclaimer = document.getElementById('saveWAV_disclaimer');
@@ -59,10 +63,10 @@ function displayFileInfo(wav, file) {
   const channelsError = (wav.fmt.numChannels !== 1) ? " (Error, mono only)" : "";
   const metadataDisplay = (wav.chunkSize !== wav.data.chunkSize + wav.fmt.chunkSize + 20) ? "YES" : "NO";
   const headerLengthDisplay = (wav.fmt.chunkSize === 16) ? "16 (short)" : `${wav.fmt.chunkSize} (long)`;
-  const samplesCount = wav.getSamples().length;
+  const samplesCount = wav.getSamples(true).length;
 
   // RMS to dB
-  const rmsValue = calculateRMS(wav.getSamples());
+  const rmsValue = calculateRMS(wav.getSamples(true));
   const dBValue = rmsToDb(rmsValue);
 
   infoBox.innerHTML = `
@@ -77,12 +81,46 @@ function displayFileInfo(wav, file) {
   `;
 
   if (wav.fmt.numChannels === 1 && wav.fmt.sampleRate === 48000 && wav.bitDepth === '24') {
-    disclaimer.style.display = 'none';
+    // Отображение элементов управления и плеера
+    disclaimer.style.display = 'none'; // Скрытие дисклеймера
     saveButton.style.display = 'block';
+    volumeControls.hidden = false;
+    audioPlayer.hidden = false;
+    // Только если формат файла соответствует требованиям, вызываем функции отображения графиков и плеера
+    drawWaveform(waveform, sampleRate);
+    drawFrequencyResponse(waveform, sampleRate);
+    playAudio(waveform, sampleRate);
   } else {
     disclaimer.style.display = 'block';
     saveButton.style.display = 'none';
+    volumeControls.hidden = true;
+    audioPlayer.hidden = true;
+    clearVisualization();  // Очистка визуала при неподходящем файле
   }
+}
+
+function clearVisualization() {
+  const waveformChartCanvas = document.getElementById('waveformChart').getContext('2d');
+  const frequencyChartCanvas = document.getElementById('frequencyChart').getContext('2d');
+  const audioPlayer = document.getElementById('audioPlayer');
+
+  // Очищаем канвасы
+  if (waveformChart) {
+    waveformChart.destroy();
+  }
+  if (frequencyChart) {
+    frequencyChart.destroy();
+  }
+
+  // Остановка и скрытие аудиоплеера
+  if (audioPlayer) {
+    audioPlayer.pause();
+    audioPlayer.src = '';
+  }
+
+  // Очистка изображений на канвасах, если графики были удалены
+  waveformChartCanvas.clearRect(0, 0, waveformChartCanvas.canvas.width, waveformChartCanvas.canvas.height);
+  frequencyChartCanvas.clearRect(0, 0, frequencyChartCanvas.canvas.width, frequencyChartCanvas.canvas.height);
 }
 
 function drawWaveform(waveform, sampleRate) {
@@ -212,14 +250,14 @@ function dBReduction(waveform, dB) {
 }
 
 function calculateRMS(waveform) {
-    const sampleLength = 1000; // number of samples to analyse
-    let sumOfSquares = 0;
+  const sampleLength = waveform.length; // number of samples to analyse
+  let sumOfSquares = 0;
 
-    for (let i = 0; i < sampleLength; i++) {
-      sumOfSquares += waveform[i] * waveform[i];
-    }
+  for (let i = 0; i < waveform.length; i++) {
+    sumOfSquares += waveform[i] * waveform[i] / Math.pow(Math.pow(2, 24), 2);
+  }
 
-    return Math.sqrt(sumOfSquares / waveform.length);
+  return Math.sqrt(sumOfSquares / sampleLength);
 }
 
 // RMS to dB
