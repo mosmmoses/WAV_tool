@@ -352,18 +352,18 @@ function SL_save_wav() {
     wav_out.fromScratch(1, audioContext.sampleRate, '24', adjustedWaveform);
     wav_out.toBitDepth('24');
     const outputWav = wav_out.toBuffer();
-    jSaver(outputWav, firName + "_clean", "wav");
+    SL_Saver(outputWav, firName + "_clean", "wav");
   } catch (err) {
     SL_readfile_msg(false, err.message);
   }
 }
 
-// jSaver Сохраняет Blob объект как файл на локальном устройстве
+// SL_Saver Сохраняет Blob объект как файл на локальном устройстве
 // Возвращает void
 // @o - Blob объект для сохранения
 // @name - Имя файла без расширения
 // @ext - Расширение файла
-function jSaver(o, name, ext) {
+function SL_Saver(o, name, ext) {
   name = name.replace(/[^a-zA-Z0-9]/g, '_');
   var a = document.createElement("a");
   document.body.appendChild(a);

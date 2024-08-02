@@ -222,7 +222,7 @@ function SL_save_wav() {
     return;
   }
   if (wav) {
-    jSaver(wav.toBuffer(), firName + "_clean", "wav");
+    SL_Saver(wav.toBuffer(), firName + "_clean", "wav");
     return;
   }
 }
@@ -238,7 +238,7 @@ function readSingleFile(e) {
   firName = file.name.split('.').slice(0, -1).join('.');
 }
 
-function jSaver(o, name, ext) {
+function SL_Saver(o, name, ext) {
   name = name.replace(/[^a-zA-Z0-9]/g, '_');
   var saveByteArray = (function () {
     var a = document.createElement("a");
