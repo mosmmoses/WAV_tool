@@ -9,39 +9,51 @@ var reader = new FileReader();
 var firName = '';
 var wav_in = new wavefile.WaveFile();
 
+// Обработчик события 'change' для элемента input с id 'file-input'
+// Срабатывает при выборе wav - файла
+// @event - Событие изменения input элемента
 document.getElementById('file-input').addEventListener('change', function (event) {
   const file = event.target.files[0];
   if (file && file.type === 'audio/wav') {
+    // Обработчик загрузки файла
     reader.onload = function (e) {
       try {
+        // Чтение файла и замена 'audio/x-wav' (для mac)
         wav_in.fromDataURI(e.target.result.replace('audio/x-wav', 'audio/wav'));
         SL_readfile_msg(true);
-        // displayFileInfo(wav_in, file);
-
+        // Извлечение данных файла
         const arrayBuffer = e.target.result.split(',')[1];
+        // Создание "аудиоконтекста"
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        // Декодирование аудиофайла
         audioContext.decodeAudioData(processAudio(arrayBuffer), function (buffer) {
           originalWaveform = buffer.getChannelData(0);
+          // Корректировка громкости
           adjustedWaveform = adjustVolume(originalWaveform, 0);
           // drawWaveform(originalWaveform, buffer.sampleRate);
           // drawFrequencyResponse(originalWaveform, buffer.sampleRate);
           // playAudio(originalWaveform, buffer.sampleRate);
 
-          // Передача необходимых данных в функцию отображения информации о загруженном файле
+          // Передача данных в функцию отображения информации о загруженном файле
           displayFileInfo(wav_in, buffer.sampleRate, originalWaveform);
         });
 
       } catch (err) {
+        // Обработчик ошибок при чтении файла
         SL_readfile_msg(false, err.message);
       }
     };
     reader.readAsDataURL(file);
+    // Получение имени файла без расширения
     firName = file.name.split('.').slice(0, -1).join('.');
   } else {
     alert('Please upload a valid WAV file.');
   }
 });
 
+// processAudio Преобразует аудио в массив данных для дальнейшей обработки
+// Возвращает массив байтов
+// @arrayBuffer - Содержит данные аудио файла в виде строки base64
 function processAudio(arrayBuffer) {
   const binaryString = window.atob(arrayBuffer);
   const len = binaryString.length;
@@ -52,6 +64,11 @@ function processAudio(arrayBuffer) {
   return bytes.buffer;
 }
 
+// displayFileInfo Отображает информацию о загруженном файле, выводит графики формы волны и АЧХ
+// Возвращает void
+// @wav - Объект WaveFile с информацией о файле
+// @sampleRate - Частота дискретизации файла
+// @waveform - Данные аудиофайла: Float32Array, содержащий данные PCM
 function displayFileInfo(wav, sampleRate, waveform) {
   const infoBox = document.getElementById('wavfile_info');
   const saveButton = document.getElementById('saveWAV_button');
@@ -64,7 +81,6 @@ function displayFileInfo(wav, sampleRate, waveform) {
   const headerLengthDisplay = (wav.fmt.chunkSize === 16) ? "16 (short)" : `${wav.fmt.chunkSize} (long)`;
   const samplesCount = wav.getSamples(true).length;
 
-  // RMS to dB
   const rmsValue = calculateRMS(wav.getSamples(true));
   const dBValue = rmsToDb(rmsValue);
 
@@ -97,11 +113,12 @@ function displayFileInfo(wav, sampleRate, waveform) {
   }
 }
 
+// clearVisualization Очищает графики и останавливает аудиоплеер
+// Возвращает void
 function clearVisualization() {
   const waveformChartCanvas = document.getElementById('waveformChart').getContext('2d');
   const frequencyChartCanvas = document.getElementById('frequencyChart').getContext('2d');
   const audioPlayer = document.getElementById('audioPlayer');
-
   // Очищаем канвасы
   if (waveformChart) {
     waveformChart.destroy();
@@ -109,18 +126,20 @@ function clearVisualization() {
   if (frequencyChart) {
     frequencyChart.destroy();
   }
-
   // Остановка и скрытие аудиоплеера
   if (audioPlayer) {
     audioPlayer.pause();
     audioPlayer.src = '';
   }
-
   // Очистка изображений на канвасах, если графики были удалены
   waveformChartCanvas.clearRect(0, 0, waveformChartCanvas.canvas.width, waveformChartCanvas.canvas.height);
   frequencyChartCanvas.clearRect(0, 0, frequencyChartCanvas.canvas.width, frequencyChartCanvas.canvas.height);
 }
 
+// drawWaveform Рисует график формы волны
+// Возвращает void
+// @waveform - Данные аудиофайла: Float32Array, содержащий данные PCM
+// @sampleRate - Частота дискретизации файла
 function drawWaveform(waveform, sampleRate) {
   const ctx = document.getElementById('waveformChart').getContext('2d');
   const data = waveform.slice(0, waveform.length);
@@ -166,6 +185,10 @@ function drawWaveform(waveform, sampleRate) {
   });
 }
 
+// drawFrequencyResponse Рисует график АЧХ
+// Возвращает void
+// @signal - Данные аудиофайла: Float32Array, содержащий данные PCM
+// @sampleRate - Частота дискретизации файла
 function drawFrequencyResponse(signal, sampleRate) {
   const fftSize = 1024;
   const buffer = new Float32Array(fftSize);
@@ -215,6 +238,10 @@ function drawFrequencyResponse(signal, sampleRate) {
   });
 }
 
+// playAudio Проигрывает аудио через Web Audio API
+// Возвращает void
+// @waveform - Данные аудиофайла: Float32Array, содержащий данные PCM
+// @sampleRate - Частота дискретизации файла
 function playAudio(waveform, sampleRate) {
   if (source) {
     source.stop();
@@ -233,7 +260,10 @@ function playAudio(waveform, sampleRate) {
   audioPlayer.src = URL.createObjectURL(wavBlob);
 }
 
-// Volume adjustment
+// adjustVolume Регулирует громкость до заданного уровня RMS
+// Возвращает новый буфер с измененной громкостью
+// @waveform - Исходный буфер данных аудио: Float32Array, содержащий данные PCM
+// @targetRMS - Целевой уровень RMS в дБ
 function adjustVolume(waveform, targetRMS) {
   const targetAmplitude = Math.pow(10, targetRMS / 20);
   const currentRMS = calculateRMS(waveform.slice(0, waveform.length));
@@ -248,8 +278,11 @@ function adjustVolume(waveform, targetRMS) {
 //   return waveform.map(sample => sample * factor);
 // }
 
+// calculateRMS Вычисляет RMS waveform
+// Возвращает RMS значение
+// @waveform - Данные аудиофайла: Float32Array, содержащий данные PCM
 function calculateRMS(waveform) {
-  const sampleLength = waveform.length; // number of samples to analyse
+  const sampleLength = waveform.length;
   let sumOfSquares = 0;
 
   for (let i = 0; i < waveform.length; i++) {
@@ -259,11 +292,13 @@ function calculateRMS(waveform) {
   return Math.sqrt(sumOfSquares / sampleLength);
 }
 
-// RMS to dB
+// rmsToDb Преобразует RMS значение в дБ
+// Возвращает значение в дБ
 function rmsToDb(rms) {
   return 20 * Math.log10(rms);
 }
 
+// Обработчик изменения громкости через радио кнопки
 document.querySelectorAll('input[name="volume"]').forEach(radio => {
   radio.addEventListener('change', function (event) {
     const dBValue = parseFloat(event.target.value);
@@ -274,6 +309,10 @@ document.querySelectorAll('input[name="volume"]').forEach(radio => {
   });
 });
 
+// SL_readfile_msg Отображает сообщение о состоянии чтения файла
+// Возвращает void
+// @success - Указывает, успешно ли было чтение файла: bool
+// @message - Сообщение об ошибке (если есть)
 function SL_readfile_msg(success, message) {
   const filenameDisplay = document.getElementById('file-input-filename');
   if (success) {
@@ -299,29 +338,31 @@ function SL_readfile_msg(success, message) {
 //   }
 // }
 
+// SL_save_wav Сохраняет текущий измененный буфер с аудиоданными в файл WAV
+// Возвращает void
 function SL_save_wav() {
   try {
-    // New buffer with adjusteadjusted waveform
+    // Новый буфер
     const saveBuffer = audioContext.createBuffer(1, adjustedWaveform.length, audioContext.sampleRate);
     saveBuffer.getChannelData(0).set(adjustedWaveform);
-
-    // New WaveFile obj. for saving the results
+    // Новый объект WaveFile для сохранения результатов
     let wav_out = new wavefile.WaveFile();
     wav_out.fromScratch(1, audioContext.sampleRate, '24', saveBuffer.getChannelData(0));
-
-    // Setting the file header
+    // Установка параметров выгружаемого файла
     wav_out.fromScratch(1, audioContext.sampleRate, '24', adjustedWaveform);
-    wav_out.toBitDepth('24'); // Setting the bit depth to 24 bits
+    wav_out.toBitDepth('24');
     const outputWav = wav_out.toBuffer();
-
-    // Create and upload new file
     jSaver(outputWav, firName + "_clean", "wav");
-
   } catch (err) {
     SL_readfile_msg(false, err.message);
   }
 }
 
+// jSaver Сохраняет Blob объект как файл на локальном устройстве
+// Возвращает void
+// @o - Blob объект для сохранения
+// @name - Имя файла без расширения
+// @ext - Расширение файла
 function jSaver(o, name, ext) {
   name = name.replace(/[^a-zA-Z0-9]/g, '_');
   var a = document.createElement("a");
@@ -338,6 +379,7 @@ function jSaver(o, name, ext) {
 
 
 // FFT definition
+// Source: https://gist.github.com/corbanbrook/4ef7ce98fe4453d754cd7e4a341d6e5b
 class FFT {
   constructor(bufferSize, sampleRate) {
     this.bufferSize = bufferSize;
