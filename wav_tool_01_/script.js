@@ -29,7 +29,7 @@ document.getElementById('file-input').addEventListener('change', function (event
         audioContext.decodeAudioData(processAudio(arrayBuffer), function (buffer) {
           originalWaveform = buffer.getChannelData(0);
           // Корректировка громкости
-          adjustedWaveform = adjustVolume(originalWaveform, 0);
+          //adjustedWaveform = adjustVolume(originalWaveform, 0);
           // drawWaveform(originalWaveform, buffer.sampleRate);
           // drawFrequencyResponse(originalWaveform, buffer.sampleRate);
           // playAudio(originalWaveform, buffer.sampleRate);
@@ -81,8 +81,14 @@ function displayFileInfo(wav, sampleRate, waveform) {
   const headerLengthDisplay = (wav.fmt.chunkSize === 16) ? "16 (short)" : `${wav.fmt.chunkSize} (long)`;
   const samplesCount = wav.getSamples(true).length;
 
+  //вывод рмс громкости исходного файла
   const rmsValue = calculateRMS(wav.getSamples(true));
   const dBValue = rmsToDb(rmsValue);
+
+  //вывод пиковой громкости исходного файла
+  let samples = wav.getSamples(true);
+  const peaklev = Math.max.apply(null, samples);
+  const peaklevdb = rmsToDb(peaklev/Math.pow(2, wav.bitDepth));
 
   infoBox.innerHTML = `
     <p>Sample rate: ${wav.fmt.sampleRate}Hz${sampleRateError}</p>
@@ -91,7 +97,8 @@ function displayFileInfo(wav, sampleRate, waveform) {
     <p>Metadata: ${metadataDisplay}</p>
     <p>Header length: ${headerLengthDisplay}</p>
     <p>Samples: ${samplesCount}</p>
-    <p>RMS dB: ${dBValue.toFixed(3)} </p>   
+    <p>RMS level [dB]: ${dBValue.toFixed(3)} </p>   
+    <p>Peak level [dB]: ${peaklevdb.toFixed(3)} </p>   
   `;
 
   if (wav.fmt.numChannels === 1 && wav.fmt.sampleRate === 48000 && wav.bitDepth === '24') {
@@ -273,6 +280,15 @@ function adjustVolume(waveform, targetRMS) {
   return waveform.map(sample => sample * scaleFactor);
 }
 
+// то же, что adjust volume, но без автоуровня, просто аттенюация
+function SL_attenuate(waveform, levdb) {
+  //так как нет функции дб в амплитуду, то буду считать сам тут. Надо будет переделать
+
+  const gain = Math.pow(10, levdb/20); // опять же 20 захардкожена, исправить потом
+  const scaleFactor = (targetAmplitude / currentAmplitude);
+  return waveform.map(sample => sample * scaleFactor);
+}
+
 // function dBReduction(waveform, dB) {
 //   const factor = Math.pow(10, dB / 20);
 //   return waveform.map(sample => sample * factor);
@@ -286,12 +302,19 @@ function calculateRMS(waveform) {
   let sumOfSquares = 0;
 
   for (let i = 0; i < waveform.length; i++) {
-    sumOfSquares += waveform[i] * waveform[i] / Math.pow(Math.pow(2, 24), 2);
+    sumOfSquares += waveform[i] * waveform[i] / Math.pow(Math.pow(2, 24), 2); //битность 24 хардкод, надо брать из файла
   }
 
   return Math.sqrt(sumOfSquares / sampleLength);
 }
 
+
+/*
+2DO: не рмс, а любое знаение в дб. Дб это как бы относительное значение, а функция преобразует
+абсолютные в относительные - и должна быть функция наоборот еще. 
+И должен быть выбор амплитуда у нас или мощность, там разные формулы (20 или 10 в коэффициенте), от этого зависит результат, и децибелы для рмс и для пик-громкостей разные!
+ссыль https://sengpielaudio.com/calculator-gainloss.htm
+*/
 // rmsToDb Преобразует RMS значение в дБ
 // Возвращает значение в дБ
 function rmsToDb(rms) {
