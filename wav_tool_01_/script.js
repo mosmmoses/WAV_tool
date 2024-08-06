@@ -14,7 +14,7 @@ var wav_in = new wavefile.WaveFile();
 // @event - Событие изменения input элемента
 document.getElementById('file-input').addEventListener('change', function (event) {
   const file = event.target.files[0];
-  if (file && file.type === 'audio/wav') {
+  if (file && (file.type === 'audio/wav' || file.type === 'audio/x-wav')) { //макось, курва, и её x-wav
     // Обработчик загрузки файла
     reader.onload = function (e) {
       try {
@@ -87,7 +87,7 @@ function displayFileInfo(wav, sampleRate, waveform) {
 
   //вывод пиковой громкости исходного файла
   let samples = wav.getSamples(true);
-  const peaklev = Math.max.apply(null, samples);
+  const peaklev = Math.max.apply(null, samples); 
   const peaklevdb = rmsToDb(peaklev/Math.pow(2, wav.bitDepth));
 
   infoBox.innerHTML = `
