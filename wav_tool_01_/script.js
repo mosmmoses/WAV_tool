@@ -321,6 +321,13 @@ function rmsToDb(rms) {
   return 20 * Math.log10(rms);
 }
 
+//2DO: дописать
+//value/db - исходные данные
+//eference - относительно чего считаем децибелы
+//type - амплитуда или мощность
+function ValueToDb(value, reference, type) { return; }
+function DbToValue(db, reference, type) { return; }
+
 // Обработчик изменения громкости через радио кнопки
 document.querySelectorAll('input[name="volume"]').forEach(radio => {
   radio.addEventListener('change', function (event) {
