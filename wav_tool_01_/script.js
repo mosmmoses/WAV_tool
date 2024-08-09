@@ -29,10 +29,7 @@ document.getElementById('file-input').addEventListener('change', function (event
         audioContext.decodeAudioData(processAudio(arrayBuffer), function (buffer) {
           originalWaveform = buffer.getChannelData(0);
           // Корректировка громкости
-          //adjustedWaveform = adjustVolume(originalWaveform, 0);
-          // drawWaveform(originalWaveform, buffer.sampleRate);
-          // drawFrequencyResponse(originalWaveform, buffer.sampleRate);
-          // playAudio(originalWaveform, buffer.sampleRate);
+          // adjustedWaveform = adjustVolume(originalWaveform, 0);
 
           // Передача данных в функцию отображения информации о загруженном файле
           displayFileInfo(wav_in, buffer.sampleRate, originalWaveform);
@@ -82,13 +79,20 @@ function displayFileInfo(wav, sampleRate, waveform) {
   const samplesCount = wav.getSamples(true).length;
 
   //вывод рмс громкости исходного файла
-  const rmsValue = calculateRMS(wav.getSamples(true));
-  const dBValue = rmsToDb(rmsValue);
+  const rmsValue = calculateRMS(wav.getSamples(true), wav.bitDepth);
+  // const dBValue = rmsToDb(rmsValue);
+  const dBValue = valueToDb(rmsValue, 9, 'power');  // используем эталонное значение 1.0 для RMS
 
   //вывод пиковой громкости исходного файла
   let samples = wav.getSamples(true);
-  const peaklev = Math.max.apply(null, samples); 
-  const peaklevdb = rmsToDb(peaklev/Math.pow(2, wav.bitDepth));
+  const peakValue = Math.max(...samples.map(Math.abs));  // Находим максимальное абсолютное значение
+  const peakDb = valueToDb(peakValue/Math.pow(2, wav.bitDepth), 0.5, 'amplitude');  // используем эталонное значение 1.0 для пика
+
+  // Проверка первого и последнего семпла
+  const firstSample = waveform[0];
+  const lastSample = waveform[waveform.length - 1];
+  const boundaryIssue_1 = (firstSample !== 0 ) ? "Yes" : "No";
+  const boundaryIssue_2 = (lastSample !== 0) ? "Yes" : "No";
 
   infoBox.innerHTML = `
     <p>Sample rate: ${wav.fmt.sampleRate}Hz${sampleRateError}</p>
@@ -97,8 +101,12 @@ function displayFileInfo(wav, sampleRate, waveform) {
     <p>Metadata: ${metadataDisplay}</p>
     <p>Header length: ${headerLengthDisplay}</p>
     <p>Samples: ${samplesCount}</p>
+    <p></p>
     <p>RMS level [dB]: ${dBValue.toFixed(3)} </p>   
-    <p>Peak level [dB]: ${peaklevdb.toFixed(3)} </p>   
+    <p>Peak level [dB]: ${peakDb.toFixed(3)} </p>
+    <p></p>
+    <p>Boundary issue 1st sample (not zero?): ${boundaryIssue_1}</p>  
+    <p>Boundary issue last sample (not zero?): ${boundaryIssue_2}</p>   
   `;
 
   if (wav.fmt.numChannels === 1 && wav.fmt.sampleRate === 48000 && wav.bitDepth === '24') {
@@ -274,7 +282,6 @@ function playAudio(waveform, sampleRate) {
 function adjustVolume(waveform, targetRMS) {
   const targetAmplitude = Math.pow(10, targetRMS / 20);
   const currentRMS = calculateRMS(waveform.slice(0, waveform.length));
-  // const currentRMS = calculateRMS(waveform.slice(0, 1000));
   const currentAmplitude = Math.pow(10, rmsToDb(currentRMS) / 20);
   const scaleFactor = (targetAmplitude / currentAmplitude);
   return waveform.map(sample => sample * scaleFactor);
@@ -289,20 +296,15 @@ function SL_attenuate(waveform, levdb) {
   return waveform.map(sample => sample * scaleFactor);
 }
 
-// function dBReduction(waveform, dB) {
-//   const factor = Math.pow(10, dB / 20);
-//   return waveform.map(sample => sample * factor);
-// }
-
 // calculateRMS Вычисляет RMS waveform
 // Возвращает RMS значение
 // @waveform - Данные аудиофайла: Float32Array, содержащий данные PCM
-function calculateRMS(waveform) {
+function calculateRMS(waveform, bitDepth) {
   const sampleLength = waveform.length;
   let sumOfSquares = 0;
 
   for (let i = 0; i < waveform.length; i++) {
-    sumOfSquares += waveform[i] * waveform[i] / Math.pow(Math.pow(2, 24), 2); //битность 24 хардкод, надо брать из файла
+    sumOfSquares += waveform[i] * waveform[i] / Math.pow(Math.pow(2, bitDepth), 2);
   }
 
   return Math.sqrt(sumOfSquares / sampleLength);
@@ -315,24 +317,54 @@ function calculateRMS(waveform) {
 И должен быть выбор амплитуда у нас или мощность, там разные формулы (20 или 10 в коэффициенте), от этого зависит результат, и децибелы для рмс и для пик-громкостей разные!
 ссыль https://sengpielaudio.com/calculator-gainloss.htm
 */
+
 // rmsToDb Преобразует RMS значение в дБ
 // Возвращает значение в дБ
 function rmsToDb(rms) {
   return 20 * Math.log10(rms);
 }
 
-//2DO: дописать
-//value/db - исходные данные
-//eference - относительно чего считаем децибелы
-//type - амплитуда или мощность
-function ValueToDb(value, reference, type) { return; }
-function DbToValue(db, reference, type) { return; }
+// 2DO: дописать
+// value/db - исходные данные
+// reference - относительно чего считаем децибелы
+// type - амплитуда или мощность
+// function ValueToDb(value, reference, type) { return; }
+
+// Преобразует абсолютные значения в децибелы
+// @value - абсолютное значение
+// @reference - эталонное значение для сравнения
+// @type - тип значения ('amplitude' или 'power')
+function valueToDb(value, reference, type) {
+  if (type === 'amplitude') {
+      return 20 * Math.log10(value / reference);
+  } else if (type === 'power') {
+      return 10 * Math.log10(value / reference);
+  } else {
+      throw new Error("Unknown type specified. Use 'amplitude' or 'power'.");
+  }
+}
+
+// function DbToValue(db, reference, type) { return; }
+// Преобразует децибелы обратно в абсолютные значения
+// @db - значение в децибелах
+// @reference - эталонное значение для сравнения
+// @type - тип значения ('amplitude' или 'power')
+function dbToValue(db, reference, type) {
+  if (type === 'amplitude') {
+      return reference * Math.pow(10, db / 20);
+  } else if (type === 'power') {
+      return reference * Math.pow(10, db / 10);
+  } else {
+      throw new Error("Unknown type specified. Use 'amplitude' or 'power'.");
+  }
+}
 
 // Обработчик изменения громкости через радио кнопки
 document.querySelectorAll('input[name="volume"]').forEach(radio => {
   radio.addEventListener('change', function (event) {
     const dBValue = parseFloat(event.target.value);
     adjustedWaveform = adjustVolume(originalWaveform, dBValue);
+    // adjustedWaveform = SL_attenuate(origiыnalWaveform, dBValue);
     drawWaveform(adjustedWaveform, audioContext.sampleRate);
     drawFrequencyResponse(adjustedWaveform, audioContext.sampleRate);
     playAudio(adjustedWaveform, audioContext.sampleRate);
@@ -357,16 +389,6 @@ function SL_readfile_msg(success, message) {
     firName = '';
   }
 }
-
-// function SL_getcleanwav(wav) {
-//   if (wav) {
-//     let wav_out = new wavefile.WaveFile();
-//     wav_out.fromScratch(wav.fmt.numChannels, wav.fmt.sampleRate, wav.bitDepth, wav.getSamples());
-//     return wav_out;
-//   } else {
-//     return null;
-//   }
-// }
 
 // SL_save_wav Сохраняет текущий измененный буфер с аудиоданными в файл WAV
 // Возвращает void
