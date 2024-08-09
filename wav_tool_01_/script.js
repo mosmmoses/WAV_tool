@@ -78,21 +78,18 @@ function displayFileInfo(wav, sampleRate, waveform) {
   const headerLengthDisplay = (wav.fmt.chunkSize === 16) ? "16 (short)" : `${wav.fmt.chunkSize} (long)`;
   const samplesCount = wav.getSamples(true).length;
 
-  //вывод рмс громкости исходного файла
-  const rmsValue = calculateRMS(wav.getSamples(true), wav.bitDepth);
-  // const dBValue = rmsToDb(rmsValue);
-  const dBValue = valueToDb(rmsValue, 9, 'power');  // используем эталонное значение 1.0 для RMS
-
-  //вывод пиковой громкости исходного файла
-  let samples = wav.getSamples(true);
-  const peakValue = Math.max(...samples.map(Math.abs));  // Находим максимальное абсолютное значение
-  const peakDb = valueToDb(peakValue/Math.pow(2, wav.bitDepth), 0.5, 'amplitude');  // используем эталонное значение 1.0 для пика
-
   // Проверка первого и последнего семпла
   const firstSample = waveform[0];
   const lastSample = waveform[waveform.length - 1];
   const boundaryIssue_1 = (firstSample !== 0 ) ? "Yes" : "No";
   const boundaryIssue_2 = (lastSample !== 0) ? "Yes" : "No";
+
+  // RMS и Peak Level
+  const rmsValue = calculateRMS(wav.getSamples(true), wav.bitDepth);
+  const dBValue = valueToDb(rmsValue, 0.5, 'power');  // используем эталонное значение 1.0 для RMS
+  let samples = wav.getSamples(true);
+  const peakValue = Math.max(...samples.map(Math.abs));  // Находим максимальное абсолютное значение
+  const peakDb = valueToDb(peakValue / Math.pow(2, wav.bitDepth), 0.5, 'amplitude');  // используем эталонное значение 0.5 для Peak Level
 
   infoBox.innerHTML = `
     <p>Sample rate: ${wav.fmt.sampleRate}Hz${sampleRateError}</p>
@@ -338,9 +335,9 @@ function valueToDb(value, reference, type) {
   if (type === 'amplitude') {
       return 20 * Math.log10(value / reference);
   } else if (type === 'power') {
-      return 10 * Math.log10(value / reference);
+      return 20 * Math.log10(value / reference);
   } else {
-      throw new Error("Unknown type specified. Use 'amplitude' or 'power'.");
+      throw new Error("Unknown type specified");
   }
 }
 
@@ -353,7 +350,7 @@ function dbToValue(db, reference, type) {
   if (type === 'amplitude') {
       return reference * Math.pow(10, db / 20);
   } else if (type === 'power') {
-      return reference * Math.pow(10, db / 10);
+      return reference * Math.pow(10, db / 20);
   } else {
       throw new Error("Unknown type specified. Use 'amplitude' or 'power'.");
   }
